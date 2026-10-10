@@ -1,9 +1,15 @@
 from datetime import datetime
+from enum import Enum
 
-from sqlalchemy import CHAR, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import CHAR, DateTime, Enum as SAEnum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.base import Base
+
+
+class AlbumRole(str, Enum):
+    OWNER = "owner"
+    MEMBER = "member"
 
 
 class TimestampMixin:
@@ -59,6 +65,17 @@ class AlbumMember(TimestampMixin, Base):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), primary_key=True)
     album_id: Mapped[int] = mapped_column(ForeignKey("album.id"), primary_key=True)
+    role: Mapped[AlbumRole] = mapped_column(
+        SAEnum(
+            AlbumRole,
+            name="album_role",
+            native_enum=True,
+            values_callable=lambda roles: [role.value for role in roles],
+        ),
+        nullable=False,
+        default=AlbumRole.MEMBER,
+        server_default=AlbumRole.MEMBER.value,
+    )
 
     user: Mapped["User"] = relationship(back_populates="album_memberships")
     album: Mapped["Album"] = relationship(back_populates="members")

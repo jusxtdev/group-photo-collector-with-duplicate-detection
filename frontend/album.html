@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>gpc-with-dd - Album</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a href="albums.html" class="back">&larr; Albums</a>
+      <button type="button" id="logout" class="ghost">Logout</button>
+    </header>
+
+    <main class="container">
+      <p id="message" class="message" hidden></p>
+
+      <div class="album-header">
+        <h1 id="album-title">Loading&hellip;</h1>
+        <span id="album-role" class="badge"></span>
+      </div>
+
+      <div id="stats" class="stats"></div>
+
+      <section class="panel">
+        <h2>Photos</h2>
+        <p class="muted">Photo upload and gallery are coming soon.</p>
+      </section>
+    </main>
+
+    <script type="module" src="js/album.js"></script>
+  </body>
+</html>

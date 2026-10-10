@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>gpc-with-dd - Sign in</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <main class="auth">
+      <div class="card">
+        <h1>gpc-with-dd</h1>
+        <p class="subtitle">Google Photos clone with dedup detection</p>
+
+        <div class="tabs">
+          <button type="button" id="tab-login" class="tab active">Login</button>
+          <button type="button" id="tab-signup" class="tab">Sign up</button>
+        </div>
+
+        <form id="login-form" class="form">
+          <label>
+            Email
+            <input type="email" id="login-email" required autocomplete="email" />
+          </label>
+          <label>
+            Password
+            <input type="password" id="login-password" required autocomplete="current-password" />
+          </label>
+          <button type="submit" class="primary">Login</button>
+        </form>
+
+        <form id="signup-form" class="form" hidden>
+          <label>
+            Name
+            <input type="text" id="signup-name" required autocomplete="name" />
+          </label>
+          <label>
+            Email
+            <input type="email" id="signup-email" required autocomplete="email" />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              id="signup-password"
+              required
+              minlength="8"
+              autocomplete="new-password"
+            />
+            <small>At least 8 characters.</small>
+          </label>
+          <button type="submit" class="primary">Create account</button>
+        </form>
+
+        <p id="message" class="message" hidden></p>
+      </div>
+    </main>
+    <script type="module" src="js/auth.js"></script>
+  </body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>gpc-with-dd - Albums</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <strong>gpc-with-dd</strong>
+      <button type="button" id="logout" class="ghost">Logout</button>
+    </header>
+
+    <main class="container">
+      <p id="message" class="message" hidden></p>
+
+      <section class="panel">
+        <h2>Create album</h2>
+        <form id="create-form" class="inline-form">
+          <input type="text" id="create-title" placeholder="Album title" required maxlength="255" />
+          <button type="submit" class="primary">Create</button>
+        </form>
+        <div id="join-code-result" class="join-result" hidden>
+          <span>Share this join code:</span>
+          <code id="join-code-value"></code>
+          <button type="button" id="copy-code" class="ghost">Copy</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Join album</h2>
+        <form id="join-form" class="inline-form">
+          <input type="text" id="join-code" placeholder="Join code" required maxlength="64" />
+          <button type="submit" class="primary">Join</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Your albums</h2>
+        <div id="album-list" class="album-grid"></div>
+      </section>
+    </main>
+
+    <script type="module" src="js/albums.js"></script>
+  </body>
+</html>

@@ -1,12 +1,22 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.routes import auth, root
+from src.core.config import settings
+from src.routes import album, auth, root
 from src.schemas.response import ApiResponse
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.exception_handler(HTTPException)
@@ -36,3 +46,4 @@ async def validation_exception_handler(
 
 app.include_router(root.router)
 app.include_router(auth.router)
+app.include_router(album.router)
