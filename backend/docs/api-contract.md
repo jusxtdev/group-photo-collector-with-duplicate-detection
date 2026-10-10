@@ -717,8 +717,11 @@ the `ApiResponse` envelope).
   list is oldest-first (`created_at` asc, `user.id` asc).
 - **No pagination, filtering, or sorting parameters** are implemented on any
   endpoint.
-- **Photos:** A `photos` table and `Photo` model exist, and `photo_count` is
-  surfaced in album detail, but **no photo endpoints are implemented**.
+- **Photos:** A `photos` table and `Photo` model exist (`id`, `album_id`,
+  `uploaded_by`, `sha256`, `phash`, `object_key`, timestamps), and `photo_count`
+  is surfaced in album detail, but **no photo endpoints are implemented**.
+  `object_key` stores the object-storage key and is `NOT NULL`; nothing writes it
+  yet (see section 7).
 
 ## 7. Uncertainties and Gaps
 
@@ -728,10 +731,11 @@ the `ApiResponse` envelope).
 - **Object storage (R2) not implemented:** There is no Cloudflare R2 / S3
   client, no storage configuration (the `.env` file defines only `DATABASE_URL`
   and `JWT_SECRET`), and no upload flow, despite `boto3` being a declared
-  dependency. The `Photo` model stores only `sha256` and `phash` — there is no
-  object-key column and no defined R2 key scheme. Consequently, album deletion
-  removes `photos` rows but does **not** delete any R2 objects. This gap will
-  matter once photo upload/storage is implemented.
+  dependency. The `Photo` model has an `object_key` column (`String(1024)`,
+  `NOT NULL`) intended to hold the object-storage key, in addition to `sha256`
+  and `phash`, but no code populates it and no R2 key scheme is defined.
+  Consequently, album deletion removes `photos` rows but does **not** delete any
+  R2 objects. This gap will matter once photo upload/storage is implemented.
 - **Base URL/port:** Not defined in backend code. `http://127.0.0.1:8000` is
   taken from the frontend configuration and from Uvicorn's default; it is not a
   backend-guaranteed contract.

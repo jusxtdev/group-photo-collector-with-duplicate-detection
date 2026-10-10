@@ -89,6 +89,7 @@ class Photo(TimestampMixin, Base):
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     sha256: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     phash: Mapped[str] = mapped_column(Text, nullable=False)
+    object_key: Mapped[str] = mapped_column(String(1024), nullable=False)
 
     album: Mapped["Album"] = relationship(back_populates="photos")
     uploader: Mapped["User"] = relationship(back_populates="photos")
