@@ -3,13 +3,16 @@ from sqlalchemy.orm import Session
 
 from src.core.database import get_db
 from src.core.deps import get_current_user
-from src.models import User
+from src.models import AlbumRole, User
 from src.schemas.album import (
     AlbumCreate,
     AlbumCreated,
     AlbumDetail,
     AlbumJoin,
+    AlbumMemberRead,
+    AlbumMemberRoleUpdate,
     AlbumRead,
+    AlbumUpdate,
     AlbumWithRole,
 )
 from src.schemas.response import ApiResponse
@@ -116,3 +119,246 @@ def join_album(
         role=role,
     )
     return ApiResponse.ok(data=data, msg="Joined album")
+
+
+@router.get(
+    "/albums/{album_id}/members",
+    response_model=ApiResponse[list[AlbumMemberRead]],
+)
+def list_album_members(
+    album_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ApiResponse[list[AlbumMemberRead]]:
+    try:
+        members = album_service.list_album_members(
+            db, album_id=album_id, user=current_user
+        )
+    except album_service.AlbumNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Album not found",
+        ) from exc
+    data = [
+        AlbumMemberRead(
+            user_id=member_user.id,
+            name=member_user.name,
+            role=membership.role,
+            joined_at=membership.created_at,
+        )
+        for member_user, membership in members
+    ]
+    return ApiResponse.ok(data=data, msg="Members retrieved")
+
+
+@router.patch(
+    "/albums/{album_id}/members/{user_id}/role",
+    response_model=ApiResponse[AlbumMemberRead],
+)
+def update_member_role(
+    album_id: int,
+    user_id: int,
+    payload: AlbumMemberRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ApiResponse[AlbumMemberRead]:
+    try:
+        target_user, membership = album_service.update_member_role(
+            db,
+            album_id=album_id,
+            target_user_id=user_id,
+            new_role=payload.role,
+            actor=current_user,
+        )
+    except album_service.AlbumNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Album not found",
+        ) from exc
+    except album_service.NotAlbumOwnerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except album_service.NotMainOwnerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except album_service.MemberNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except album_service.AlreadyOwnerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except album_service.NotAnOwnerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except album_service.CannotDemoteMainOwnerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    data = AlbumMemberRead(
+        user_id=target_user.id,
+        name=target_user.name,
+        role=membership.role,
+        joined_at=membership.created_at,
+    )
+    msg = (
+        "Member promoted to owner"
+        if membership.role is AlbumRole.OWNER
+        else "Owner demoted to member"
+    )
+    return ApiResponse.ok(data=data, msg=msg)
+
+
+def _remove_membership(
+    db: Session,
+    *,
+    album_id: int,
+    target_user_id: int,
+    actor: User,
+    success_msg: str,
+) -> ApiResponse[AlbumMemberRead]:
+    try:
+        target_user, role, joined_at = album_service.remove_member(
+            db,
+            album_id=album_id,
+            target_user_id=target_user_id,
+            actor=actor,
+        )
+    except album_service.AlbumNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Album not found",
+        ) from exc
+    except album_service.MemberNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except album_service.CannotRemoveMemberError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except album_service.CannotRemoveOtherOwnerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except album_service.CannotRemoveCreatorError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return ApiResponse.ok(
+        data=AlbumMemberRead(
+            user_id=target_user.id,
+            name=target_user.name,
+            role=role,
+            joined_at=joined_at,
+        ),
+        msg=success_msg,
+    )
+
+
+@router.delete(
+    "/albums/{album_id}/members/me",
+    response_model=ApiResponse[AlbumMemberRead],
+)
+def leave_album(
+    album_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ApiResponse[AlbumMemberRead]:
+    return _remove_membership(
+        db,
+        album_id=album_id,
+        target_user_id=current_user.id,
+        actor=current_user,
+        success_msg="Left album",
+    )
+
+
+@router.delete(
+    "/albums/{album_id}/members/{user_id}",
+    response_model=ApiResponse[AlbumMemberRead],
+)
+def remove_member(
+    album_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ApiResponse[AlbumMemberRead]:
+    return _remove_membership(
+        db,
+        album_id=album_id,
+        target_user_id=user_id,
+        actor=current_user,
+        success_msg="Member removed",
+    )
+
+
+@router.patch(
+    "/albums/{album_id}",
+    response_model=ApiResponse[AlbumRead],
+)
+def update_album(
+    album_id: int,
+    payload: AlbumUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ApiResponse[AlbumRead]:
+    try:
+        album = album_service.update_album_title(
+            db, album_id=album_id, title=payload.title, actor=current_user
+        )
+    except album_service.AlbumNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Album not found",
+        ) from exc
+    except album_service.AlbumEditForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    return ApiResponse.ok(
+        data=AlbumRead.model_validate(album), msg="Album updated"
+    )
+
+
+@router.delete(
+    "/albums/{album_id}",
+    response_model=ApiResponse[AlbumRead],
+)
+def delete_album(
+    album_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ApiResponse[AlbumRead]:
+    try:
+        deleted = album_service.delete_album(
+            db, album_id=album_id, actor=current_user
+        )
+    except album_service.AlbumNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Album not found",
+        ) from exc
+    except album_service.CannotDeleteAlbumError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    return ApiResponse.ok(
+        data=AlbumRead.model_validate(deleted), msg="Album deleted"
+    )

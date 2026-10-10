@@ -25,6 +25,26 @@ export function isAuthed() {
   return Boolean(getToken());
 }
 
+// Reads the current user's ID from the JWT `sub` claim.
+// The API contract documents `sub` as the user ID string; there is no /me endpoint.
+export function getCurrentUserId() {
+  const token = getToken();
+  if (!token) return null;
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "=",
+    );
+    const claims = JSON.parse(atob(padded));
+    return claims.sub != null ? String(claims.sub) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 export function requireAuth() {
   if (!isAuthed()) {
     window.location.replace("index.html");

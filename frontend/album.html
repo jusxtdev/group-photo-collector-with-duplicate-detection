@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-store" />
     <title>gpc-with-dd - Album</title>
-    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="css/styles.css?v=6" />
   </head>
   <body>
     <header class="topbar">
@@ -18,9 +19,31 @@
       <div class="album-header">
         <h1 id="album-title">Loading&hellip;</h1>
         <span id="album-role" class="badge"></span>
+        <button type="button" id="edit-album" class="ghost small-btn" hidden>
+          Edit title
+        </button>
+        <button type="button" id="delete-album" class="ghost small-btn" hidden>
+          Delete album
+        </button>
+        <button type="button" id="leave-album" class="ghost small-btn" hidden>
+          Leave album
+        </button>
       </div>
 
+      <form id="edit-form" class="edit-form" hidden>
+        <div class="inline-form">
+          <input type="text" id="edit-title" required maxlength="255" />
+          <button type="submit" class="primary">Save</button>
+          <button type="button" id="edit-cancel" class="ghost">Cancel</button>
+        </div>
+      </form>
+
       <div id="stats" class="stats"></div>
+
+      <section class="panel">
+        <h2>Members</h2>
+        <div id="member-list" class="member-list"></div>
+      </section>
 
       <section class="panel">
         <h2>Photos</h2>
@@ -28,6 +51,6 @@
       </section>
     </main>
 
-    <script type="module" src="js/album.js"></script>
+    <script type="module" src="js/album.js?v=6"></script>
   </body>
 </html>

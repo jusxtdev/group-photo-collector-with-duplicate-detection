@@ -9,3 +9,6 @@ node_modules/
 
 # OS
 .DS_Store
+
+# api-contract watcher runtime state
+.watch/

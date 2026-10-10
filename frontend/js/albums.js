@@ -1,4 +1,4 @@
-import { request, clearToken, requireAuth } from "./api.js";
+import { request, clearToken, requireAuth } from "./api.js?v=2";
 
 const state = { albums: [] };
 
