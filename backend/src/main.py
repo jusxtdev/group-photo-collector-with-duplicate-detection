@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.core.config import settings
-from src.routes import album, auth, root
+from src.routes import album, auth, photo, root
 from src.schemas.response import ApiResponse
 
 app = FastAPI()
@@ -47,3 +47,4 @@ async def validation_exception_handler(
 app.include_router(root.router)
 app.include_router(auth.router)
 app.include_router(album.router)
+app.include_router(photo.router)

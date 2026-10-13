@@ -1,4 +1,4 @@
-import { request, setToken, redirectIfAuthed } from "./api.js?v=2";
+import { request, setToken, redirectIfAuthed } from "./api.js?v=3";
 
 function showMessage(text, kind = "error") {
   const el = document.getElementById("message");

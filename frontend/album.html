@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Cache-Control" content="no-store" />
     <title>gpc-with-dd - Album</title>
-    <link rel="stylesheet" href="css/styles.css?v=6" />
+    <link rel="stylesheet" href="css/styles.css?v=8" />
   </head>
   <body>
     <header class="topbar">
@@ -47,10 +47,20 @@
 
       <section class="panel">
         <h2>Photos</h2>
-        <p class="muted">Photo upload and gallery are coming soon.</p>
+        <form id="upload-form" class="inline-form">
+          <input
+            type="file"
+            id="photo-files"
+            accept="image/*"
+            multiple
+            required
+          />
+          <button type="submit" class="primary">Upload</button>
+        </form>
+        <div id="photo-gallery" class="photo-grid"></div>
       </section>
     </main>
 
-    <script type="module" src="js/album.js?v=6"></script>
+    <script type="module" src="js/album.js?v=9"></script>
   </body>
 </html>

@@ -114,6 +114,7 @@ def create_album(db: Session, *, title: str, creator: User) -> tuple[Album, str]
         try:
             db.commit()
         except IntegrityError:
+            # if the join_code is not unique, try again with a new join_code
             db.rollback()
             continue
         db.refresh(album)

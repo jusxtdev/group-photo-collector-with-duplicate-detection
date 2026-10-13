@@ -565,6 +565,46 @@ small {
   font-size: 0.8rem;
 }
 
+/* ---------- Photos ---------- */
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.photo-tile {
+  margin: 0;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  background: var(--base00);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.photo-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-tile .fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.photo-grid .muted {
+  grid-column: 1 / -1;
+}
+
 /* ---------- Reduced motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {

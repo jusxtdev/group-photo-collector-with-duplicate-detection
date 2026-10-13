@@ -8,7 +8,7 @@ from src.models import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login/token")
 
-
+# used as dependency to extract the current user's access token from the incoming request
 def get_current_user(
     db: Session = Depends(get_db),
     token: str = Depends(oauth2_scheme),

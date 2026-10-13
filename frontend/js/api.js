@@ -63,7 +63,10 @@ export function redirectIfAuthed(target = "albums.html") {
 
 export async function request(path, { method = "GET", body, auth = true } = {}) {
   const headers = {};
-  if (body !== undefined) {
+  // multipart/form-data bodies (photo upload) must let the browser set the
+  // Content-Type so it can include the multipart boundary.
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !isFormData) {
     headers["Content-Type"] = "application/json";
   }
   if (auth) {
@@ -73,12 +76,17 @@ export async function request(path, { method = "GET", body, auth = true } = {}) 
     }
   }
 
+  let requestBody;
+  if (body !== undefined) {
+    requestBody = isFormData ? body : JSON.stringify(body);
+  }
+
   let response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: requestBody,
     });
   } catch (err) {
     throw new ApiError("Could not reach the server", { statusCode: 0 });

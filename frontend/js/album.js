@@ -1,4 +1,4 @@
-import { request, requireAuth, clearToken, getCurrentUserId } from "./api.js?v=2";
+import { request, requireAuth, clearToken, getCurrentUserId } from "./api.js?v=3";
 
 let albumId = null;
 let currentRole = null;
@@ -170,6 +170,51 @@ async function loadMembers(id) {
   }
 }
 
+function renderPhotos(photos) {
+  const gallery = document.getElementById("photo-gallery");
+  gallery.innerHTML = "";
+
+  if (photos.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No photos yet. Upload some to see them here.";
+    gallery.appendChild(empty);
+    return;
+  }
+
+  // Each item carries a short-lived pre-signed `url` for direct <img> display.
+  // (contract 3.16)
+  for (const photo of photos) {
+    const tile = document.createElement("figure");
+    tile.className = "photo-tile";
+
+    const img = document.createElement("img");
+    img.src = photo.url;
+    img.alt = `Photo ${photo.id}`;
+    img.loading = "lazy";
+    // If the pre-signed URL is expired, unreachable, or rejects the request,
+    // show a placeholder inside the tile instead of a blank block.
+    img.addEventListener("error", () => {
+      const fallback = document.createElement("div");
+      fallback.className = "fallback";
+      fallback.textContent = "Image unavailable";
+      tile.replaceChildren(fallback);
+    });
+    tile.appendChild(img);
+
+    gallery.appendChild(tile);
+  }
+}
+
+async function loadPhotos(id) {
+  try {
+    const photos = await request(`/photo/albums/${id}/photos`);
+    renderPhotos(photos);
+  } catch (err) {
+    showMessage(err.message);
+  }
+}
+
 async function changeRole(userId, name, role, button) {
   button.disabled = true;
   showMessage("");
@@ -267,6 +312,38 @@ async function deleteAlbum(button) {
   }
 }
 
+async function handleUpload(event) {
+  event.preventDefault();
+  const input = document.getElementById("photo-files");
+  const files = input.files;
+  if (!files || files.length === 0) return;
+
+  // The batch endpoint expects repeated `files` form parts. (contract 3.15)
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  const submitButton =
+    event.submitter || event.target.querySelector('button[type="submit"]');
+  if (submitButton) submitButton.disabled = true;
+  showMessage("");
+  try {
+    const uploaded = await request(`/photo/albums/${albumId}/photos/batch`, {
+      method: "POST",
+      body: formData,
+    });
+    input.value = "";
+    const count = Array.isArray(uploaded) ? uploaded.length : 0;
+    showMessage(`Uploaded ${count} photo${count === 1 ? "" : "s"}`, "success");
+    await Promise.all([loadAlbum(albumId), loadPhotos(albumId)]);
+  } catch (err) {
+    showMessage(err.message);
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
+}
+
 async function init() {
   if (!requireAuth()) return;
 
@@ -287,6 +364,8 @@ async function init() {
   document.getElementById("edit-form").addEventListener("submit", handleEditSubmit);
   document.getElementById("edit-cancel").addEventListener("click", hideEditForm);
 
+  document.getElementById("upload-form").addEventListener("submit", handleUpload);
+
   const id = new URLSearchParams(window.location.search).get("id");
   if (!id) {
     showMessage("No album id provided");
@@ -295,6 +374,7 @@ async function init() {
   albumId = id;
   await loadAlbum(id);
   loadMembers(id);
+  loadPhotos(id);
 }
 
 init();

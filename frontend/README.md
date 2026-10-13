@@ -44,5 +44,7 @@ js/album.js   album detail page logic
 ## Notes
 
 - Auth token stored in `localStorage` under `gpc_token`.
-- Photo upload/gallery is not implemented (no backend endpoints yet).
+- Photo upload and gallery listing are implemented: `POST
+  /photo/albums/{id}/photos/batch` for uploads and `GET
+  /photo/albums/{id}/photos` for the gallery (pre-signed URLs).
 - The token is kept in `localStorage` for simplicity; revisit before production.

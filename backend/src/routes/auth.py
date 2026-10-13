@@ -34,6 +34,8 @@ def signup(
     return ApiResponse.ok(data=user, msg="User created")
 
 
+# Public JSON login for normal API clients: accepts a JSON body and wraps the
+# token in the standard ApiResponse envelope.
 @router.post("/login", response_model=ApiResponse[Token])
 def login(payload: UserLogin, db: Session = Depends(get_db)) -> ApiResponse[Token]:
     user = user_service.authenticate_user(
@@ -50,6 +52,9 @@ def login(payload: UserLogin, db: Session = Depends(get_db)) -> ApiResponse[Toke
     return ApiResponse.ok(data=token, msg="Login successful")
 
 
+# Separate endpoint for Swagger UI's "Authorize" button. The OAuth2 password
+# flow requires a form-encoded request and a bare Token response (top-level
+# access_token), which the ApiResponse envelope on /login does not provide.
 @router.post("/login/token", response_model=Token)
 def login_token(
     form: OAuth2PasswordRequestForm = Depends(),

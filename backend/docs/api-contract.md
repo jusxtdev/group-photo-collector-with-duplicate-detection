@@ -8,7 +8,9 @@ document reflects the implementation in `src/` as of the current commit.
 - **Purpose:** Backend for a shared photo-album application. It provides user
   registration and login (JWT bearer auth), album creation/joining, album
   membership management (roles, removal, and voluntary leaving), album
-  listing/detail retrieval, album title editing, and album deletion.
+  listing/detail retrieval, album title editing, album deletion, and batch
+  photo upload to object storage. Photos can be listed via the gallery
+  endpoint, which includes pre-signed URLs for display.
 - **Framework:** FastAPI (see `src/main.py`), served by Uvicorn.
 - **Base URL / base path:** There is no configured base path or route prefix;
   every route is mounted at the application root. The backend code does not
@@ -31,6 +33,7 @@ document reflects the implementation in `src/` as of the current commit.
     `/albums/join`, the album update endpoint, and the role update endpoint).
   - `application/x-www-form-urlencoded` for `POST /login/token` (OAuth2 password
     form).
+  - `multipart/form-data` for `POST /photo/albums/{album_id}/photos/batch`.
 - **Success response envelope:** All JSON endpoints except `POST /login/token`
   return the envelope:
 
@@ -545,8 +548,8 @@ document reflects the implementation in `src/` as of the current commit.
   }
   ```
 
-  `data` has the same shape as section 3.4 (`AlbumRead`). `updated_at` is
-  refreshed automatically by the database (`onupdate`).
+  `data` has the same shape as sections 3.5–3.6 (`AlbumRead` base fields).
+  `updated_at` is refreshed automatically by the database (`onupdate`).
 
 - **Authorization rules (from `src/services/album.py`, `update_album_title`):**
   1. Caller must have a membership in the album (otherwise `404 Album not
@@ -615,10 +618,129 @@ document reflects the implementation in `src/` as of the current commit.
   delete-orphan`) to all of its `album_members` and `photos` rows. Deleting an
   album does **not** delete the creator or member user accounts, and does not
   delete any user's other albums.
-  - **Object storage (R2):** No object-storage integration is implemented yet, so
-    no R2 objects are deleted. The `photos` rows are removed, but any
-    corresponding external objects (were an upload flow to exist) are left in
-    place. See section 7.
+  - **Object storage (R2):** Album deletion removes the `photos` rows but does
+    **not** delete the corresponding files from S3-compatible storage. Objects
+    uploaded via section 3.15 are orphaned when their album is deleted. See
+    section 7.
+
+---
+
+### 3.15 `POST /photo/albums/{album_id}/photos/batch`
+
+- **Purpose:** Upload one or more photos to an album in a single request. Each
+  file is stored in object storage and recorded in the database.
+- **Auth:** Required (bearer token); the caller must be a member of the album.
+- **Path parameters:**
+  - `album_id` (integer) — album ID.
+- **Request:** `multipart/form-data` with one field:
+  - `files` (required, one or more) — the photo files, sent as repeated form
+    parts under the same `files` field (for example
+    `curl -F "files=@a.jpg" -F "files=@b.jpg"`).
+- **Success:** `201 Created`
+
+  ```json
+  {
+    "status": true,
+    "msg": "Photos uploaded",
+    "data": [
+      {
+        "id": 40,
+        "album_id": 10,
+        "uploaded_by": 1,
+        "sha256": "1349b0f07a16e6747ef1ee93a9c784646ea3c54ca70e319b9d7a137bdafb3c23",
+        "phash": "ffffffffffffffff",
+        "object_key": "albums/10/ba3ea1145f464170aea7231180896930.jpg",
+        "created_at": "2026-10-10T07:00:00Z",
+        "updated_at": "2026-10-10T07:00:00Z"
+      }
+    ]
+  }
+  ```
+
+  One entry is returned per uploaded file, in request order.
+- **Processing per file (from `src/services/photo.py`):**
+  - The uploaded bytes are hashed with SHA-256 (`sha256`, 64-char lowercase
+    hex).
+  - A perceptual average hash is computed with Pillow (`phash`, 16-char hex).
+  - A unique object key `albums/{album_id}/{uuid4hex}{ext}` is generated, where
+    `ext` is the lowercased original filename extension (empty if none).
+  - The original bytes are uploaded to the configured S3-compatible bucket
+    (`S3_BUCKET_NAME`) under that key with the file's declared content type.
+  - A `photos` row is inserted with `album_id`, `uploaded_by` (the caller),
+    `sha256`, `phash`, and `object_key`.
+- **Atomicity / failure handling:** All files are uploaded and all rows are
+  committed in a single database transaction. If any file fails (invalid image,
+  storage error, or database error), the transaction is rolled back and every
+  object uploaded during the request is deleted from storage. No partial upload
+  is persisted.
+- **Errors:**
+
+  | Status | `msg` | Condition |
+  |--------|-------|-----------|
+  | `400` | `File '<filename>' is not a valid image` | A part is not a decodable image |
+  | `401` | `Not authenticated` | Missing bearer token |
+  | `401` | `Could not validate credentials` | Invalid/expired token or unknown user |
+  | `404` | `Album not found` | Album does not exist, or caller is not a member |
+  | `422` | `Validation error` | No `files` parts, or `album_id` not an integer |
+  | `500` | `Could not upload photos` | Object-storage or database failure |
+
+- **Notes:**
+  - No duplicate detection is performed: identical files are stored again, each
+    under a new unique `object_key`. `sha256` and `phash` are persisted so
+    deduplication can be added later.
+  - There is no download (proxy) or deletion endpoint for photos; see section
+    3.16 for listing, which returns pre-signed URLs for display.
+  - Content type is whatever the client declares; the server does not sniff or
+    override it.
+
+---
+
+### 3.16 `GET /photo/albums/{album_id}/photos`
+
+- **Purpose:** List the photos in an album (newest first) for the gallery,
+  including a short-lived pre-signed S3 URL for each photo so clients can render
+  them directly in `<img>` tags without sending the bearer token to the bucket.
+- **Auth:** Required (bearer token); the caller must be a member of the album.
+- **Path parameters:**
+  - `album_id` (integer) — album ID.
+- **Success:** `200 OK`
+
+  ```json
+  {
+    "status": true,
+    "msg": "Photos retrieved",
+    "data": [
+      {
+        "id": 40,
+        "album_id": 10,
+        "uploaded_by": 1,
+        "sha256": "1349b0f07a16e6747ef1ee93a9c784646ea3c54ca70e319b9d7a137bdafb3c23",
+        "phash": "ffffffffffffffff",
+        "object_key": "albums/10/ba3ea1145f464170aea7231180896930.jpg",
+        "created_at": "2026-10-10T07:00:00Z",
+        "updated_at": "2026-10-10T07:00:00Z",
+        "url": "https://<bucket-endpoint>/albums/10/ba3ea1145f464170aea7231180896930.jpg?X-Amz-Algorithm=...&X-Amz-Signature=..."
+      }
+    ]
+  }
+  ```
+
+  An empty album returns `data: []`.
+- **Notes:**
+  - Ordered by `created_at` descending, then `id` descending (newest first).
+  - `url` is a pre-signed `get_object` URL generated with `boto3` and valid for
+    3600 seconds (one hour). The `X-Amz-*` query parameters carry the signature.
+  - The URL is only usable for as long as the signature is valid, and only if
+    the configured object-storage endpoint is publicly reachable (relevant when
+    the endpoint is private, e.g. a tunneled R2 instance).
+  - `PhotoListItem` extends the upload payload shape (section 3.15), so
+    `sha256`, `phash`, `object_key`, and timestamps are returned alongside
+    `url`.
+- **Errors:**
+  - `401 Unauthorized` — missing/invalid token.
+  - `404 Not Found` — `msg` = `Album not found` (album does not exist, or
+    caller is not a member).
+  - `422 Unprocessable Entity` — `album_id` not an integer.
 
 ## 4. Authentication and Authorization
 
@@ -643,7 +765,9 @@ document reflects the implementation in `src/` as of the current commit.
   `PATCH /albums/{album_id}/members/{user_id}/role`,
   `DELETE /albums/{album_id}/members/{user_id}`,
   `DELETE /albums/{album_id}/members/me`,
-  `PATCH /albums/{album_id}`, `DELETE /albums/{album_id}`.
+  `PATCH /albums/{album_id}`, `DELETE /albums/{album_id}`,
+`POST /photo/albums/{album_id}/photos/batch`,
+  `GET /photo/albums/{album_id}/photos`.
 - **Role / ownership checks:** Enforced at the service layer (sections 3.10–3.14),
   not via middleware or dependency-level role guards.
 - **Non-member access:** Album-scoped endpoints hide existence from non-members
@@ -661,6 +785,7 @@ All application/HTTP errors (except validation) share the shape
 |--------|-------|-------|
 | `400` | `The album owner cannot be demoted` | Role update |
 | `400` | `The album creator cannot be removed` | Member removal / leave |
+| `400` | `File '<filename>' is not a valid image` | Photo batch upload |
 | `401` | `Not authenticated` | Missing bearer token (framework) |
 | `401` | `Could not validate credentials` | Invalid/expired token or unknown user |
 | `401` | `Invalid email or password` | Login endpoints |
@@ -670,7 +795,7 @@ All application/HTTP errors (except validation) share the shape
 | `403` | `Only the album creator can remove other owners` | Member removal |
 | `403` | `Only album owners can edit the album` | Album update |
 | `403` | `Only the album creator can delete the album` | Album deletion |
-| `404` | `Album not found` | Album detail, album update, album deletion, members list, role update, member removal, leave |
+| `404` | `Album not found` | Album detail, album update, album deletion, members list, role update, member removal, leave, photo batch upload |
 | `404` | `Invalid join code` | Join album |
 | `404` | `User is not a member of this album` | Role update, member removal |
 | `409` | `A user with email '<email>' already exists` | Signup |
@@ -678,6 +803,7 @@ All application/HTTP errors (except validation) share the shape
 | `409` | `User is already an owner of this album` | Role update |
 | `409` | `User is not an owner of this album` | Role update |
 | `500` | `Could not generate a unique join code for the album` | Create album |
+| `500` | `Could not upload photos` | Photo batch upload |
 | `422` | `Validation error` | All endpoints with bodies/params |
 
 Note: unexpected server exceptions are not handled by a catch-all handler and
@@ -711,31 +837,44 @@ the `ApiResponse` envelope).
   (`DELETE /albums/{album_id}`, section 3.14). Other members, including promoted
   owners, get `403`. Deletion cascades to the album's `photos` and
   `album_members` rows (ORM-level `all, delete-orphan`) and does not affect user
-  accounts or other albums. No external object storage (R2) integration exists
-  yet, so no R2 objects are deleted.
+  accounts or other albums. Album deletion removes `photos` rows but does not
+  delete the corresponding files from S3-compatible storage.
 - **Ordering:** Album list is newest-first (`created_at` desc, `id` desc); member
   list is oldest-first (`created_at` asc, `user.id` asc).
 - **No pagination, filtering, or sorting parameters** are implemented on any
   endpoint.
-- **Photos:** A `photos` table and `Photo` model exist (`id`, `album_id`,
-  `uploaded_by`, `sha256`, `phash`, `object_key`, timestamps), and `photo_count`
-  is surfaced in album detail, but **no photo endpoints are implemented**.
-  `object_key` stores the object-storage key and is `NOT NULL`; nothing writes it
-  yet (see section 7).
+- **Photos:** `POST /photo/albums/{album_id}/photos/batch` (section 3.15) writes
+  `photos` rows and stores the original files in S3-compatible object storage;
+  `GET /photo/albums/{album_id}/photos` (section 3.16) lists them newest-first
+  with pre-signed URLs. `photo_count` is surfaced in album detail. There is no
+  download (proxy) or deletion endpoint, and no duplicate detection is enforced
+  (identical uploads create separate rows and objects). `object_key` is
+  `NOT NULL` and is populated by the upload endpoint.
 
 ## 7. Uncertainties and Gaps
 
 - **No automated tests exist** in the repository (no `test_*` files, no test
   configuration). All statements here are derived from source inspection and
   manual HTTP verification.
-- **Object storage (R2) not implemented:** There is no Cloudflare R2 / S3
-  client, no storage configuration (the `.env` file defines only `DATABASE_URL`
-  and `JWT_SECRET`), and no upload flow, despite `boto3` being a declared
-  dependency. The `Photo` model has an `object_key` column (`String(1024)`,
-  `NOT NULL`) intended to hold the object-storage key, in addition to `sha256`
-  and `phash`, but no code populates it and no R2 key scheme is defined.
-  Consequently, album deletion removes `photos` rows but does **not** delete any
-  R2 objects. This gap will matter once photo upload/storage is implemented.
+- **Object storage (R2/S3) implemented for uploads only:** `src/core/storage.py`
+  builds a lazily-created `boto3` S3 client from the `Settings` fields
+  (`aws_endpoint_url_s3`, `s3_bucket_name`, `aws_access_key_id`,
+  `aws_secret_access_key`, `aws_region`). The batch upload endpoint uses `put_object`; failure cleanup uses `delete_object`; the
+  gallery endpoint uses `generate_presigned_url` (fixed 3600-second expiry, not
+  configurable). The client forces SigV4 signing with path-style addressing
+  (bucket name in the URL path), which the configured Neon Storage endpoint
+  requires: without it, boto3 defaulted to SigV2 and pre-signed GETs returned
+  `403 AccessDenied`. There is no download (proxy) or delete API, and album
+  deletion does **not** delete the corresponding objects (only the `photos`
+  rows), so objects uploaded via section 3.15 are orphaned on album deletion.
+  - **Live-storage verification (partial):** a pre-signed `get_object` URL was
+    generated and fetched successfully (`200`, `image/jpeg`) against the
+    configured Neon Storage bucket. The batch-upload `put_object`/`delete_object`
+    cleanup flow has still not been exercised against a live bucket.
+- **Duplicate detection not implemented:** the upload endpoint stores `sha256`
+  and `phash` but never compares them against existing rows, so identical files
+  produce separate `photos` rows and separate objects. `phash` is `NOT NULL` and
+  is computed as an 8x8 average hash with Pillow (not a true DCT pHash).
 - **Base URL/port:** Not defined in backend code. `http://127.0.0.1:8000` is
   taken from the frontend configuration and from Uvicorn's default; it is not a
   backend-guaranteed contract.
